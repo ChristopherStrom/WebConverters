@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block content %}
+  <h2>YouTube to MP3</h2>
+  {% if error %}
+    <div class="error">{{ error }}</div>
+  {% endif %}
+  <form method="post"
+        class="download-form">
+    <input type="url"
+           name="url"
+           placeholder="Enter YouTube URL"
+           value="{{ url or '' }}"
+           required>
+    <button type="submit">Convert to MP3</button>
+  </form>
+{% endblock %}

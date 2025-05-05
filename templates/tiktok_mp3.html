@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block content %}
+  <h2>TikTok to MP3</h2>
+  {% if error %}
+    <div class="error">{{ error }}</div>
+  {% endif %}
+  <form method="post"
+        class="download-form">
+    <input type="url"
+           name="url"
+           placeholder="Enter TikTok music page URL"
+           value="{{ url or '' }}"
+           required>
+    <button type="submit">Download MP3</button>
+  </form>
+{% endblock %}

@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block content %}
+  <div class="tool-block">
+    <a href="{{ url_for('youtube_mp3') }}">YouTube to MP3</a>
+  </div>
+  <div class="tool-block">
+    <a href="{{ url_for('youtube_mp4') }}">YouTube to MP4</a>
+  </div>
+  <div class="tool-block">
+    <a href="{{ url_for('tiktok_mp3') }}">TikTok to MP3</a>
+  </div>
+{% endblock %}
