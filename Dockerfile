@@ -1,0 +1,41 @@
+# syntax=docker/dockerfile:1
+
+### 1. Build stage ###
+FROM python:3.11-slim AS build
+
+# Install build‑time dependencies
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+         build-essential \
+         ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy your application code
+COPY . .
+
+### 2. Runtime stage ###
+FROM python:3.11-slim
+
+# Create a non‑root user
+RUN groupadd -r appuser && useradd --no-log-init -r -g appuser appuser
+
+# Copy installed dependencies and code from build stage
+WORKDIR /app
+COPY --from=build /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=build /app /app
+
+# Expose the port Gunicorn will listen on
+EXPOSE 8080
+
+# Switch to non‑root user
+USER appuser
+
+# Command to run the app with Gunicorn
+# Adjust `web_convertors:app` if your Flask entry‑point module/app object is named differently
+CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:8080", "--workers", "3", "--timeout", "120"]
