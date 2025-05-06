@@ -28,7 +28,14 @@ RUN groupadd -r appuser && useradd --no-log-init -r -g appuser appuser
 # Copy installed dependencies and code from build stage
 WORKDIR /app
 COPY --from=build /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+
+# bring in the pip‑installed console scripts (gunicorn, etc.)
+COPY --from=build /usr/local/bin /usr/local/bin
+
+#code
 COPY --from=build /app /app
+
+
 
 # Expose the port Gunicorn will listen on
 EXPOSE 8080
