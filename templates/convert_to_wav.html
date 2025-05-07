@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block content %}
+  <h1>Convert MP3/MP4 to WAV</h1>
+  <p>Upload an MP3, MP4, or M4A file to convert it to WAV format.</p>
+  
+  {% if error %}
+    <div class="error">
+      <p>{{ error }}</p>
+    </div>
+  {% endif %}
+  
+  <div class="form-container">
+    <form method="POST" enctype="multipart/form-data">
+      <div class="form-group">
+        <label for="audio_file">Select Audio File:</label>
+        <input type="file" id="audio_file" name="audio_file" accept=".mp3,.mp4,.m4a">
+      </div>
+      <div class="form-group">
+        <button type="submit">Convert to WAV</button>
+      </div>
+    </form>
+  </div>
+  
+  <div class="back-link">
+    <a href="{{ url_for('home') }}">Back to Home</a>
+  </div>
+{% endblock %}
