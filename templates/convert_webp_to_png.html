@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block content %}
+  <h1>Convert WebP to PNG</h1>
+  <p>Upload a WebP image to convert it to PNG format.</p>
+  
+  {% if error %}
+    <div class="error">
+      <p>{{ error }}</p>
+    </div>
+  {% endif %}
+  
+  <div class="form-container">
+    <form method="POST" enctype="multipart/form-data">
+      <div class="form-group">
+        <label for="image_file">Select WebP Image:</label>
+        <input type="file" id="image_file" name="image_file" accept=".webp">
+      </div>
+      <div class="form-group">
+        <button type="submit">Convert to PNG</button>
+      </div>
+    </form>
+  </div>
+  
+  <div class="back-link">
+    <a href="{{ url_for('home') }}">Back to Home</a>
+  </div>
+{% endblock %}

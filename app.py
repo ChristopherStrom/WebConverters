@@ -3,6 +3,7 @@ from convertors.tiktok_mp3 import convert_tiktok_to_mp3
 from convertors.youtube_mp3 import convert_youtube_to_mp3
 from convertors.youtube_mp4 import convert_youtube_to_mp4
 from convertors.mp3_to_wav import convert_to_wav
+from convertors.webp_to_png import convert_webp_to_png
 import os
 
 app = Flask(__name__)
@@ -101,6 +102,48 @@ def convert_to_wav_route():
             error = "Unsupported file format. Please upload an MP3 or MP4 audio file."
     
     return render_template('convert_to_wav.html', error=error)
+
+@app.route('/convert/webp_to_png', methods=['GET', 'POST'])
+def convert_webp_to_png_route():
+    error = None
+    if request.method == 'POST':
+        if 'image_file' not in request.files:
+            error = "No file part"
+            return render_template('convert_webp_to_png.html', error=error)
+            
+        image_file = request.files['image_file']
+        if image_file.filename == '':
+            error = "No selected file"
+            return render_template('convert_webp_to_png.html', error=error)
+            
+        if image_file and image_file.filename.lower().endswith('.webp'):
+            try:
+                # Save the uploaded file temporarily
+                uploads_dir = os.path.join(app.static_folder, 'uploads')
+                os.makedirs(uploads_dir, exist_ok=True)
+                temp_path = os.path.join(uploads_dir, image_file.filename)
+                image_file.save(temp_path)
+                
+                # Convert the file to PNG
+                png_path, filename = convert_webp_to_png(temp_path, app.static_folder)
+                
+                # Clean up the temporary file
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+                
+                # Send the converted file
+                return send_file(
+                    png_path,
+                    mimetype='image/png',
+                    as_attachment=True,
+                    download_name=filename
+                )
+            except Exception as e:
+                error = str(e)
+        else:
+            error = "Unsupported file format. Please upload a WebP image file."
+    
+    return render_template('convert_webp_to_png.html', error=error)
 
 if __name__ == '__main__':
     app.run(debug=True)
