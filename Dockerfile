@@ -22,8 +22,18 @@ COPY . .
 ### 2. Runtime stage ###
 FROM python:3.11-slim
 
+# Install runtime dependencies
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 # Create a non‑root user
 RUN groupadd -r appuser && useradd --no-log-init -r -g appuser appuser
+
+# Create necessary directories and set permissions
+RUN mkdir -p /app/static/downloads /app/static/uploads \
+    && chmod 777 /app/static/downloads /app/static/uploads
 
 # Copy installed dependencies and code from build stage
 WORKDIR /app
@@ -32,10 +42,11 @@ COPY --from=build /usr/local/lib/python3.11/site-packages /usr/local/lib/python3
 # bring in the pip‑installed console scripts (gunicorn, etc.)
 COPY --from=build /usr/local/bin /usr/local/bin
 
-#code
+# code
 COPY --from=build /app /app
 
-
+# Ensure proper permissions for app directory
+RUN chown -R appuser:appuser /app/static
 
 # Expose the port Gunicorn will listen on
 EXPOSE 8080
@@ -44,5 +55,4 @@ EXPOSE 8080
 USER appuser
 
 # Command to run the app with Gunicorn
-# Adjust `web_convertors:app` if your Flask entry‑point module/app object is named differently
-CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:8080", "--workers", "3", "--timeout", "120"]
+CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:8080", "--workers", "3", "--timeout", "300", "--limit-request-line", "0", "--limit-request-fields", "32768"]
