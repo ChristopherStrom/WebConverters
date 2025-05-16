@@ -42,15 +42,17 @@ conversion_status = {}
 def background_youtube_conversion(url, video_id):
     """Process YouTube conversion in a background thread"""
     status_key = f"yt_{video_id}"
-    conversion_status[status_key] = {
-        'status': 'processing',
-        'message': 'Download in progress...',
-        'progress': 0,
-        'filename': None,
-        'url': url
-    }
     
     try:
+        # Set initial status
+        conversion_status[status_key] = {
+            'status': 'processing',
+            'message': 'Download in progress...',
+            'progress': 0,
+            'filename': None,
+            'url': url
+        }
+        
         # Convert the YouTube video to MP3
         path, name = convert_youtube_to_mp3(url, app.static_folder)
         logger.debug(f"Conversion completed - Path: {path}, Name: {name}")
@@ -83,6 +85,94 @@ def background_youtube_conversion(url, video_id):
             'progress': 0,
             'url': url
         }
+
+@app.route('/youtube/mp3', methods=['GET', 'POST'])
+def youtube_mp3():
+    """Handle YouTube to MP3 conversion requests"""
+    error = None
+    status_message = None
+    video_id = None
+    processing = False
+    
+    if request.method == 'POST':
+        url = request.form.get('url')
+        try:
+            # Extract video ID from URL
+            if "v=" in url:
+                video_id = url.split("v=")[1].split("&")[0]
+            elif "youtu.be/" in url:
+                video_id = url.split("youtu.be/")[1].split("?")[0]
+            else:
+                video_id = f"video_{int(time.time())}"
+            
+            logger.debug(f"Processing YouTube URL: {url}, Video ID: {video_id}")
+            
+            # Check if we already have the file
+            expected_path = os.path.join(app.static_folder, 'downloads', f"youtube_{video_id}.mp3")
+            status_key = f"yt_{video_id}"
+            
+            if os.path.exists(expected_path):
+                # File already exists, ready for download
+                status_message = "Your file is ready for download!"
+                
+            elif status_key in conversion_status:
+                # Conversion already in progress or completed
+                current_status = conversion_status[status_key]
+                
+                if current_status['status'] == 'complete':
+                    status_message = "Your file is ready for download!"
+                elif current_status['status'] == 'error':
+                    error = current_status['message']
+                else:
+                    # Still processing
+                    status_message = "Your file is being processed. Please wait or check back later."
+                    processing = True
+            
+            else:
+                # Start a new background conversion
+                conversion_thread = threading.Thread(
+                    target=background_youtube_conversion,
+                    args=(url, video_id)
+                )
+                conversion_thread.daemon = True
+                conversion_thread.start()
+                
+                # Tell the user it's processing
+                status_message = "Your download has started. Large files may take several minutes to process."
+                processing = True
+                
+        except Exception as e:
+            logger.exception("Error initiating YouTube to MP3 conversion")
+            error = str(e)
+    
+    # Check for status in URL params (for refreshes)
+    elif request.args.get('vid'):
+        video_id = request.args.get('vid')
+        status_key = f"yt_{video_id}"
+        
+        # Check if file exists
+        expected_path = os.path.join(app.static_folder, 'downloads', f"youtube_{video_id}.mp3")
+        
+        if os.path.exists(expected_path):
+            status_message = "Your file is ready for download!"
+        elif status_key in conversion_status:
+            current_status = conversion_status[status_key]
+            if current_status['status'] == 'complete':
+                status_message = "Your file is ready for download!"
+            elif current_status['status'] == 'error':
+                error = current_status['message']
+            else:
+                status_message = "Your file is still being processed. Please wait or check back later."
+                processing = True
+        else:
+            error = "No download found with that ID. It may have expired."
+    
+    return render_template('youtube_mp3.html', 
+                          error=error, 
+                          status_message=status_message,
+                          video_id=video_id,
+                          processing=processing,
+                          url=request.form.get('url', ''))
 
 @app.route('/youtube/mp3/download/<download_id>')
 def download_youtube_mp3(download_id):
