@@ -88,13 +88,40 @@ def background_youtube_conversion(url, video_id):
 
 @app.route('/youtube/mp3', methods=['GET', 'POST'])
 def youtube_mp3():
-    """Handle YouTube to MP3 conversion requests"""
+    """Handle YouTube to MP3 conversion requests with status updates"""
     error = None
     status_message = None
     video_id = None
     processing = False
+    progress = 0
     
-    if request.method == 'POST':
+    # First, check if we're requesting status for an existing download
+    if request.args.get('vid'):
+        video_id = request.args.get('vid')
+        status_key = f"yt_{video_id}"
+        
+        # Check if file exists
+        expected_path = os.path.join(app.static_folder, 'downloads', f"youtube_{video_id}.mp3")
+        
+        if os.path.exists(expected_path):
+            # File already exists, ready for download
+            status_message = "Your file is ready for download!"
+        elif status_key in conversion_status:
+            current_status = conversion_status[status_key]
+            if current_status['status'] == 'complete':
+                status_message = "Your file is ready for download!"
+            elif current_status['status'] == 'error':
+                error = current_status['message']
+            else:
+                # Still processing
+                status_message = current_status.get('message', 'Your file is being processed...')
+                progress = current_status.get('progress', 0)
+                processing = True
+        else:
+            error = "No download found with that ID. It may have expired."
+    
+    # Handle new conversion requests
+    elif request.method == 'POST':
         url = request.form.get('url')
         try:
             # Extract video ID from URL
@@ -112,11 +139,10 @@ def youtube_mp3():
             status_key = f"yt_{video_id}"
             
             if os.path.exists(expected_path):
-                # File already exists, ready for download
+                # File already exists, show status page with download link
                 status_message = "Your file is ready for download!"
-                
             elif status_key in conversion_status:
-                # Conversion already in progress or completed
+                # Conversion already in progress, get status
                 current_status = conversion_status[status_key]
                 
                 if current_status['status'] == 'complete':
@@ -125,9 +151,9 @@ def youtube_mp3():
                     error = current_status['message']
                 else:
                     # Still processing
-                    status_message = "Your file is being processed. Please wait or check back later."
+                    status_message = current_status.get('message', 'Your file is being processed...')
+                    progress = current_status.get('progress', 0)
                     processing = True
-            
             else:
                 # Start a new background conversion
                 conversion_thread = threading.Thread(
@@ -140,39 +166,79 @@ def youtube_mp3():
                 # Tell the user it's processing
                 status_message = "Your download has started. Large files may take several minutes to process."
                 processing = True
+            
+            # Always redirect to the status page after POST
+            return redirect(url_for('youtube_mp3', vid=video_id))
                 
         except Exception as e:
             logger.exception("Error initiating YouTube to MP3 conversion")
             error = str(e)
     
-    # Check for status in URL params (for refreshes)
-    elif request.args.get('vid'):
-        video_id = request.args.get('vid')
-        status_key = f"yt_{video_id}"
-        
-        # Check if file exists
-        expected_path = os.path.join(app.static_folder, 'downloads', f"youtube_{video_id}.mp3")
-        
-        if os.path.exists(expected_path):
-            status_message = "Your file is ready for download!"
-        elif status_key in conversion_status:
-            current_status = conversion_status[status_key]
-            if current_status['status'] == 'complete':
-                status_message = "Your file is ready for download!"
-            elif current_status['status'] == 'error':
-                error = current_status['message']
-            else:
-                status_message = "Your file is still being processed. Please wait or check back later."
-                processing = True
-        else:
-            error = "No download found with that ID. It may have expired."
+    # Ensure jsonify is imported for the API response
+    from flask import jsonify
     
+    # Ensure progress has a default value
+    if not 'progress' in locals() or progress is None:
+        progress = 0
+        
+    # If processing but progress is still 0, set to minimum value for better UX
+    if processing and progress == 0:
+        progress = 5
+        
     return render_template('youtube_mp3.html', 
                           error=error, 
                           status_message=status_message,
                           video_id=video_id,
                           processing=processing,
+                          progress=progress,
                           url=request.form.get('url', ''))
+    
+    
+    @app.route('/api/youtube/status/<video_id>')
+    def youtube_status_api(video_id):
+        """API endpoint to get the current status of a YouTube conversion"""
+        status_key = f"yt_{video_id}"
+        response = {
+            "status": "unknown",
+            "progress": 0,
+            "message": "No information available",
+            "complete": False,
+            "file_ready": False,
+            "download_url": None
+        }
+        
+        # Check if file exists
+        expected_path = os.path.join(app.static_folder, 'downloads', f"youtube_{video_id}.mp3")
+        
+        if os.path.exists(expected_path):
+            # File already exists, ready for download
+            response.update({
+                "status": "complete",
+                "progress": 100,
+                "message": "Your file is ready for download!",
+                "complete": True,
+                "file_ready": True,
+                "download_url": f"/static/downloads/youtube_{video_id}.mp3"
+            })
+        elif status_key in conversion_status:
+            # Get status from conversion status dictionary
+            current_status = conversion_status[status_key]
+            
+            response.update({
+                "status": current_status.get('status', 'processing'),
+                "progress": current_status.get('progress', 0),
+                "message": current_status.get('message', 'Processing...'),
+                "complete": current_status.get('status') == 'complete',
+                "file_ready": current_status.get('status') == 'complete'
+            })
+            # Print to console for immediate visibility
+            print(f"Progress update for {video_id}: {percentage}% - {message}")
+            
+            # If complete, add download URL
+            if current_status.get('status') == 'complete':
+                response["download_url"] = f"/static/downloads/youtube_{video_id}.mp3"
+        
+        return jsonify(response)
 
 @app.route('/youtube/mp3/download/<download_id>')
 def download_youtube_mp3(download_id):

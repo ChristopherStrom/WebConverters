@@ -2,17 +2,6 @@
 {% block content %}
   <h2>YouTube to MP3</h2>
   
-  <!-- Disable loader for this page -->
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      const normalForm = document.getElementById('youtube-mp3-form');
-      if (normalForm) {
-        normalForm.onsubmit = function() {
-          return true; // Let normal form submission happen
-        };
-      }
-    });
-  </script>
   
   {% if error %}
     <div class="error" style="padding: 15px; background-color: #442222; border-radius: 5px; text-align: center; margin-bottom: 20px;">
@@ -28,27 +17,52 @@
       <p style="color: #4CAF50; font-weight: bold; margin-bottom: 15px;">{{ status_message }}</p>
       
       {% if processing %}
-        <!-- Processing indicator -->
-        <div style="margin: 20px auto; width: 70%; max-width: 400px;">
-          <div style="height: 10px; background-color: #333; border-radius: 5px; overflow: hidden;">
-            <div style="height: 100%; width: 30%; background-color: #4CAF50; animation: progress 2s infinite linear;">
+        <!-- Processing indicator with actual percentage -->
+        <div class="status-container" style="margin: 20px auto; width: 70%; max-width: 400px;">
+          <div style="height: 10px; background-color: #333; border-radius: 5px; overflow: hidden; margin-bottom: 5px;">
+            <div id="progress-bar" style="height: 100%; width: {{ progress }}%; background-color: #4CAF50; transition: width 0.5s ease;">
             </div>
           </div>
-          <p style="margin-top: 15px; font-size: 0.9em; color: #DDD;">
-            Your file is being processed. This can take several minutes for large videos.
+          <p style="margin-top: 0; font-size: 0.9em; color: #BBB; text-align: right;">
+            <span id="progress-percentage">{{ progress }}</span>% complete
           </p>
-          <p style="margin-top: 5px; font-size: 0.9em; color: #DDD;">
-            You can leave this page and return later by <a href="{{ url_for('youtube_mp3', vid=video_id) }}" style="color: #4CAF50;">bookmarking this link</a>.
+          <p class="status-message" style="margin-top: 15px; font-size: 1em; color: #EEE; text-align: center;">
+            {{ status_message }}
           </p>
-          <p style="margin-top: 15px;">
-            <a href="{{ url_for('youtube_mp3', vid=video_id) }}" style="display: inline-block; padding: 8px 15px; background-color: #555; color: white; text-decoration: none; border-radius: 4px;">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="vertical-align: text-bottom; margin-right: 5px;">
-                <path d="M8 3a5 5 0 0 0-5 5v.5a.5.5 0 0 1-1 0V8a6 6 0 1 1 12 0v.5a.5.5 0 0 1-1 0V8a5 5 0 0 0-5-5z"/>
-                <path d="M8 10a2 2 0 1 1 0-4 2 2 0 0 1 0 4z"/>
-              </svg>
-              Check Status
-            </a>
-          </p>
+          
+          <!-- Simple progress animation script -->
+          <script>
+            // Store the video ID for reference
+            var videoId = "{{ video_id }}";
+            
+            // Animate progress bar to make it look smooth
+            var currentProgress = {{ progress }};
+            var progressBar = document.getElementById('progress-bar');
+            var progressPercentage = document.getElementById('progress-percentage');
+            
+            // Function to increment progress for visual effect only
+            function incrementProgress() {
+              // Small increment (never more than 1% at once)
+              currentProgress += 0.2;
+              
+              // Only update up to 95% unless we know it's complete
+              if (currentProgress <= 95) {
+                progressBar.style.width = currentProgress + '%';
+                progressPercentage.textContent = Math.round(currentProgress);
+                
+                // Continue animation with delay
+                setTimeout(incrementProgress, 200); 
+              }
+            }
+            
+            // Start incrementing for visual effect
+            setTimeout(incrementProgress, 500);
+            
+            // Auto-refresh after a certain period to check completion
+            setTimeout(function() {
+              window.location.href = "{{ url_for('youtube_mp3', vid=video_id) }}";
+            }, 30000); // Check every 30 seconds
+          </script>
         </div>
       {% else %}
         <!-- Download button -->
