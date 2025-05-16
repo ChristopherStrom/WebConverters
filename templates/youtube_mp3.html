@@ -69,8 +69,16 @@
               }
             }
             
+            // Global variable to track if we've already shown the download button
+            var downloadButtonShown = false;
+            
             // Function to check if file is ready
             function checkFileStatus() {
+              // Skip if download button already shown
+              if (downloadButtonShown) {
+                return;
+              }
+              
               console.log("Checking file status for video ID:", videoId);
               
               // First try direct file check which is most reliable
@@ -80,6 +88,7 @@
               .then(response => {
                 if (response.ok) {
                   console.log("File exists via direct check!");
+                  downloadButtonShown = true;
                   showDownloadButton();
                   return;
                 }
@@ -97,6 +106,7 @@
                     
                     if (data.file_ready || data.complete) {
                       // File is ready! Show download button
+                      downloadButtonShown = true;
                       showDownloadButton();
                     } else if (data.error) {
                       // Show error message
@@ -150,7 +160,6 @@
             function showDownloadButton() {
               // Hide progress elements
               progressBar.parentElement.style.display = 'none';
-              progressPercentage.parentElement.style.display = 'none';
               
               // Update status message
               statusMessage.textContent = "Your MP3 is ready for download!";
@@ -159,6 +168,9 @@
               
               // Show download button
               downloadContainer.style.display = 'block';
+              
+              // Stop continuous checking since file is ready
+              console.log("Download button shown, stopping status checks");
             }
             
             // Start incrementing for visual effect
