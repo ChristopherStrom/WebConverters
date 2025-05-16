@@ -229,6 +229,25 @@ def process_youtube_mp3(url, video_id, static_folder):
     """Background thread function to process YouTube MP3 conversions"""
     status_key = f"yt_{video_id}"
     try:
+        # Make sure downloads directory exists
+        downloads_dir = os.path.join(static_folder, 'downloads')
+        os.makedirs(downloads_dir, exist_ok=True)
+        
+        # First check if the file already exists (avoid redownloading)
+        expected_file_path = os.path.join(downloads_dir, f"youtube_{video_id}.mp3")
+        if os.path.exists(expected_file_path):
+            logger.info(f"File already exists for video {video_id}, skipping download")
+            
+            # Update status to show completion
+            conversion_status[status_key] = {
+                'progress': 100,
+                'message': 'Your MP3 is ready for download!',
+                'complete': True,
+                'filename': f"youtube_audio_{video_id}.mp3",
+                'download_url': f"/youtube/mp3/download/{video_id}"
+            }
+            return
+            
         # Update status to show we're starting
         conversion_status[status_key] = {
             'progress': 0,
@@ -237,28 +256,37 @@ def process_youtube_mp3(url, video_id, static_folder):
         }
         
         # Define a progress callback function
-        def progress_callback(percent, message):
+        def progress_callback(percent, message, is_complete=False):
             # Update the global status dictionary
             conversion_status[status_key] = {
                 'progress': percent,
                 'message': message,
-                'complete': False
+                'complete': is_complete
             }
-            logger.debug(f"Progress update for {video_id}: {percent}% - {message}")
+            logger.debug(f"Progress update for {video_id}: {percent}% - {message} (Complete: {is_complete})")
             
         # Perform the actual conversion
         logger.debug(f"Starting YouTube to MP3 conversion for URL: {url}")
         file_path, filename = convert_youtube_to_mp3(url, static_folder, progress_callback)
         
+        # Verify the file was created
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"Expected MP3 file not found at {file_path}")
+            
+        # Double-check that the file is in the expected location
+        if not os.path.exists(expected_file_path):
+            logger.warning(f"File not in expected location. Copying from {file_path} to {expected_file_path}")
+            shutil.copy2(file_path, expected_file_path)
+        
         # Update status to show completion
         conversion_status[status_key] = {
             'progress': 100,
-            'message': 'Conversion complete!',
+            'message': 'Your MP3 is ready for download!',
             'complete': True,
-            'filename': filename,
+            'filename': filename or f"youtube_audio_{video_id}.mp3",
             'download_url': f"/youtube/mp3/download/{video_id}"
         }
-        logger.debug(f"YouTube to MP3 conversion completed: {filename}")
+        logger.info(f"YouTube to MP3 conversion completed: {filename}")
         
     except Exception as e:
         # Update status to show error
@@ -407,5 +435,76 @@ def convert_webp_to_png_route():
     
     return render_template('convert_webp_to_png.html', error=error)
 
+@app.route('/api/youtube/status/<video_id>')
+def youtube_status_api(video_id):
+    """API endpoint to get the current status of a YouTube conversion"""
+    from flask import jsonify
+    
+    status_key = f"yt_{video_id}"
+    response = {
+        "status": "unknown",
+        "progress": 0,
+        "message": "No information available",
+        "complete": False,
+        "file_ready": False,
+        "download_url": None,
+        "error": False
+    }
+    
+    # Check if file exists
+    expected_path = os.path.join(app.static_folder, 'downloads', f"youtube_{video_id}.mp3")
+    
+    if os.path.exists(expected_path):
+        # File already exists, ready for download
+        file_size = os.path.getsize(expected_path)
+        response.update({
+            "status": "complete",
+            "progress": 100,
+            "message": "Your file is ready for download!",
+            "complete": True,
+            "file_ready": True,
+            "download_url": f"/static/downloads/youtube_{video_id}.mp3",
+            "file_size": file_size
+        })
+        logger.debug(f"API status check: File exists for {video_id}, size: {file_size} bytes")
+    elif status_key in conversion_status:
+        # Get status from conversion status dictionary
+        current_status = conversion_status[status_key]
+        
+        # Check if there was an error
+        if current_status.get('error', False):
+            response.update({
+                "status": "error",
+                "message": current_status.get('message', 'An error occurred during conversion'),
+                "error": True,
+                "complete": True
+            })
+            logger.debug(f"API status check: Error state for {video_id}: {response['message']}")
+        else:
+            response.update({
+                "status": "processing" if not current_status.get('complete', False) else "complete",
+                "progress": current_status.get('progress', 0),
+                "message": current_status.get('message', 'Processing...'),
+                "complete": current_status.get('complete', False),
+                "file_ready": current_status.get('complete', False) and os.path.exists(expected_path)
+            })
+            
+            # If complete, add download URL but verify file exists
+            if current_status.get('complete', False):
+                if os.path.exists(expected_path):
+                    response["download_url"] = f"/static/downloads/youtube_{video_id}.mp3"
+                    response["file_ready"] = True
+                else:
+                    # This is a problem - marked complete but file doesn't exist
+                    response["message"] = "Error: File not found. Please try again."
+                    response["error"] = True
+                    logger.warning(f"API status check: File missing for completed conversion {video_id}")
+            
+            logger.debug(f"API status check: Status for {video_id}: {response['status']}, progress: {response['progress']}%")
+    else:
+        logger.warning(f"API status check: No status found for {video_id}")
+    
+    return jsonify(response)
+    
 if __name__ == '__main__':
     app.run(debug=True)

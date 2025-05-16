@@ -53,7 +53,8 @@ def convert_youtube_to_mp3(url: str, static_folder: str, progress_callback=None)
                         # Call the progress callback with percentage and message
                         progress_callback(
                             download_percent, 
-                            f"Downloading: {percent_str} complete"
+                            f"Downloading: {percent_str} complete",
+                            False  # Not complete yet
                         )
                 elif 'downloaded_bytes' in d and 'total_bytes' in d and d['total_bytes'] > 0:
                     # Alternative calculation if percent_str is not available
@@ -63,12 +64,13 @@ def convert_youtube_to_mp3(url: str, static_folder: str, progress_callback=None)
                     if progress_callback:
                         progress_callback(
                             download_percent,
-                            f"Downloading: {percent:.1f}% complete"
+                            f"Downloading: {percent:.1f}% complete",
+                            False  # Not complete yet
                         )
             
             elif d['status'] == 'finished':
                 if progress_callback:
-                    progress_callback(70, "Download complete. Converting to MP3...")
+                    progress_callback(70, "Download complete. Converting to MP3...", False)  # Not complete until MP3 is ready
         
         # 2) tell yt_dlp to download best audio + convert to mp3 with safe filename
         ydl_opts = {
