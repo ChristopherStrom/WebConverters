@@ -39,16 +39,22 @@ def youtube_mp3():
     error = None
     success = None
     download_id = None
+    download_name = None
     
     if request.method == 'POST':
         url = request.form.get('url')
         try:
             logger.debug(f"Starting YouTube to MP3 conversion for URL: {url}")
             
-            # Create a timestamp-based ID for this conversion
-            timestamp = int(time.time())
-            conversion_id = f"{timestamp}"
-
+            # Extract video ID from URL for identification
+            video_id = None
+            if "v=" in url:
+                video_id = url.split("v=")[1].split("&")[0]
+            elif "youtu.be/" in url:
+                video_id = url.split("youtu.be/")[1].split("?")[0]
+            else:
+                video_id = f"video_{int(time.time())}"
+            
             # Convert the YouTube video to MP3
             path, name = convert_youtube_to_mp3(url, app.static_folder)
             logger.debug(f"Conversion completed - Path: {path}, Name: {name}")
@@ -57,28 +63,24 @@ def youtube_mp3():
             if not os.path.exists(path):
                 raise FileNotFoundError(f"The converted file does not exist at {path}")
                 
-            # Create an extremely safe download name
-            safe_name = "youtube_audio.mp3"
+            # Create an appropriate download name
+            safe_name = f"youtube_audio_{video_id}.mp3"
             if name:
                 safe_name = secure_filename(name)
                 if not safe_name or safe_name == '.mp3':
-                    safe_name = "youtube_audio.mp3"
+                    safe_name = f"youtube_audio_{video_id}.mp3"
             
-            # Create a unique filename in downloads directory
-            unique_filename = f"youtube_{conversion_id}.mp3"
+            # Just use the video ID for the stored file
+            # We don't need to rename the file as the converter already used a safe name
+            download_id = video_id
+            download_name = safe_name
             
-            # Copy to a persistent location with a unique name
-            downloads_dir = os.path.join(app.static_folder, 'downloads')
-            os.makedirs(downloads_dir, exist_ok=True)
+            # Log more information for debugging
+            file_size = os.path.getsize(path)
+            logger.debug(f"File info - Path: {path}, Size: {file_size} bytes, ID: {download_id}")
             
-            dest_path = os.path.join(downloads_dir, unique_filename)
-            shutil.copy2(path, dest_path)
-            
-            logger.debug(f"Copied file to {dest_path}")
-            
-            # Set success message and conversion ID for the template
-            success = f"Successfully converted! File name: {safe_name}"
-            download_id = conversion_id
+            # Set success message for the template
+            success = f"Successfully converted '{name}'! Ready for download."
             
         except Exception as e:
             logger.exception("Error in YouTube to MP3 conversion")
@@ -88,6 +90,7 @@ def youtube_mp3():
                            error=error, 
                            success=success,
                            download_id=download_id,
+                           download_name=download_name,
                            url=request.form.get('url', ''))
 
 @app.route('/youtube/mp3/download/<download_id>')
@@ -96,45 +99,41 @@ def download_youtube_mp3(download_id):
     try:
         # Construct the expected filename
         filename = f"youtube_{download_id}.mp3"
-
+        
         # Path to the file
         downloads_dir = os.path.join(app.static_folder, 'downloads')
         file_path = os.path.join(downloads_dir, filename)
-
+        
         # Check if file exists
         if not os.path.exists(file_path):
             logger.error(f"File not found: {file_path}")
             return "File not found. It may have expired.", 404
-
-        # Set a generic but descriptive filename
-        download_name = f"youtube_audio_{download_id}.mp3"
-
+        
+        # Log file info for debugging
+        file_size = os.path.getsize(file_path)
+        logger.debug(f"Serving file: {file_path}, Size: {file_size} bytes")
+        
+        # Create a direct URL to the static file
+        static_url = f"/static/downloads/{filename}"
+        
         # Schedule cleanup after a delay
-        @after_this_request
-        def cleanup_file(response):
-            def delayed_cleanup():
-                time.sleep(300)  # 5 minutes
-                try:
-                    if os.path.exists(file_path):
-                        os.remove(file_path)
-                        logger.debug(f"Removed MP3 file after delay: {file_path}")
-                except Exception as e:
-                    logger.error(f"Error removing file: {e}")
-
-            import threading
-            cleanup_thread = threading.Thread(target=delayed_cleanup)
-            cleanup_thread.daemon = True
-            cleanup_thread.start()
-            return response
-
-        # Use direct file send with attachment
-        return send_file(
-            file_path,
-            as_attachment=True,
-            download_name=download_name,
-            mimetype='audio/mpeg'
-        )
-
+        def delayed_cleanup():
+            time.sleep(300)  # 5 minutes
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    logger.debug(f"Removed MP3 file after delay: {file_path}")
+            except Exception as e:
+                logger.error(f"Error removing file: {e}")
+        
+        import threading
+        cleanup_thread = threading.Thread(target=delayed_cleanup)
+        cleanup_thread.daemon = True
+        cleanup_thread.start()
+        
+        # Just redirect to the static file
+        return redirect(static_url)
+    
     except Exception as e:
         logger.exception(f"Error in download_youtube_mp3: {e}")
         return "An error occurred during download", 500

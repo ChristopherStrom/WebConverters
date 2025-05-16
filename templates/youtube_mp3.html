@@ -1,16 +1,56 @@
 {% extends 'base.html' %}
 {% block content %}
   <h2>YouTube to MP3</h2>
+  
+  <!-- Override loader script for this page -->
+  <script>
+    // Prevent the loader from activating for this page only
+    document.addEventListener('DOMContentLoaded', function() {
+      // Find the normal form and make sure it doesn't trigger the loader
+      const normalForm = document.getElementById('youtube-mp3-form');
+      if (normalForm) {
+        normalForm.onsubmit = function(e) {
+          // Let the normal form submission happen without showing the loader
+          return true;
+        };
+      }
+    });
+  </script>
+  
   {% if error %}
     <div class="error">{{ error }}</div>
   {% endif %}
-  <form method="post"
-        class="download-form">
+  
+  {% if success %}
+    <div style="margin: 20px 0; padding: 15px; background-color: #2a2a2a; border-radius: 5px; text-align: center;">
+      <p style="color: #4CAF50; font-weight: bold;">{{ success }}</p>
+      
+      <!-- Direct file link with strong styling -->
+      <a href="/static/downloads/youtube_{{ download_id }}.mp3" 
+         style="display: inline-block; margin: 15px auto; padding: 12px 25px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2); font-size: 16px;"
+         download="{{ download_name }}">
+        DOWNLOAD MP3 FILE
+      </a>
+      
+      <p style="margin-top: 10px; font-size: 0.9em; color: #DDD;">
+        Click the green button above to download your file directly.
+      </p>
+    </div>
+  {% endif %}
+  
+  <!-- Form with no class to avoid JavaScript interference -->
+  <form id="youtube-mp3-form" method="post" action="{{ url_for('youtube_mp3') }}" style="display: flex; flex-direction: column; gap: 0.75rem; max-width: 400px; margin: 1rem auto;">
     <input type="url"
            name="url"
            placeholder="Enter YouTube URL"
            value="{{ url or '' }}"
-           required>
-    <button type="submit">Convert to MP3</button>
+           required
+           style="padding: 0.5rem; border: 1px solid var(--border); border-radius: 0.25rem; background-color: var(--surface-alt); color: var(--text);">
+    <button type="submit" style="padding: 0.6rem; background-color: var(--accent); color: var(--bg); border: none; border-radius: 0.25rem; cursor: pointer; font-weight: bold;">Convert to MP3</button>
   </form>
+  
+  <div style="margin-top: 20px; color: var(--text-muted); font-size: 0.9em; text-align: center;">
+    <p>This tool converts YouTube videos to MP3 audio files.</p>
+    <p>Enter a valid YouTube URL above and click "Convert".</p>
+  </div>
 {% endblock %}
