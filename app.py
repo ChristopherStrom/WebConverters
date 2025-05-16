@@ -240,6 +240,83 @@ def youtube_mp3():
         
         return jsonify(response)
 
+@app.route('/youtube/mp3', methods=['GET', 'POST'])
+def youtube_mp3():
+    """YouTube to MP3 converter page and API endpoint"""
+    error = None
+    status_message = None
+    progress = 0
+    processing = False
+    video_id = request.args.get('vid')
+    
+    if request.method == 'POST':
+        # Handle form submission - start new conversion
+        url = request.form.get('url')
+        if not url:
+            error = "Please enter a valid YouTube URL"
+        else:
+            # Extract video ID from URL
+            if "v=" in url:
+                video_id = url.split("v=")[1].split("&")[0]
+            elif "youtu.be/" in url:
+                video_id = url.split("youtu.be/")[1].split("?")[0]
+            else:
+                error = "Could not extract video ID from URL. Please use a standard YouTube URL."
+                
+            if video_id and not error:
+                # Start a new conversion task
+                status_key = f"yt_{video_id}"
+                conversion_status[status_key] = {
+                    'progress': 0,
+                    'message': 'Starting download...',
+                    'complete': False
+                }
+                
+                # Launch conversion in background thread
+                thread = threading.Thread(
+                    target=process_youtube_mp3,
+                    args=(url, video_id, app.static_folder)
+                )
+                thread.daemon = True
+                thread.start()
+                
+                # Redirect to status page
+                return redirect(url_for('youtube_mp3', vid=video_id))
+    
+    # Handle GET requests - status check or initial page load
+    if video_id:
+        # This is a status check
+        status_key = f"yt_{video_id}"
+        
+        # Check if this is a completed download
+        filename = f"youtube_{video_id}.mp3"
+        file_path = os.path.join(app.static_folder, 'downloads', filename)
+        
+        if os.path.exists(file_path):
+            # File exists - show download button
+            status_message = "Your MP3 is ready for download!"
+            processing = False
+        elif status_key in conversion_status:
+            # Conversion in progress
+            current_status = conversion_status[status_key]
+            progress = current_status.get('progress', 0)
+            status_message = current_status.get('message', 'Processing...')
+            processing = not current_status.get('complete', False)
+        else:
+            # No status found - offer to start new conversion
+            error = "No download found with that ID. It may have expired."
+            
+    # Render template with appropriate context
+    return render_template(
+        'youtube_mp3.html', 
+        error=error,
+        status_message=status_message,
+        progress=progress,
+        processing=processing,
+        video_id=video_id,
+        url=request.form.get('url', '')
+    )
+
 @app.route('/youtube/mp3/download/<download_id>')
 def download_youtube_mp3(download_id):
     """Direct download endpoint for YouTube MP3 files"""
@@ -301,6 +378,51 @@ def download_youtube_mp3(download_id):
     except Exception as e:
         logger.exception(f"Error in download_youtube_mp3: {e}")
         return "An error occurred during download", 500
+
+def process_youtube_mp3(url, video_id, static_folder):
+    """Background thread function to process YouTube MP3 conversions"""
+    status_key = f"yt_{video_id}"
+    try:
+        # Update status to show we're starting
+        conversion_status[status_key] = {
+            'progress': 0,
+            'message': 'Starting download...',
+            'complete': False
+        }
+        
+        # Define a progress callback function
+        def progress_callback(percent, message):
+            # Update the global status dictionary
+            conversion_status[status_key] = {
+                'progress': percent,
+                'message': message,
+                'complete': False
+            }
+            logger.debug(f"Progress update for {video_id}: {percent}% - {message}")
+            
+        # Perform the actual conversion
+        logger.debug(f"Starting YouTube to MP3 conversion for URL: {url}")
+        file_path, filename = convert_youtube_to_mp3(url, static_folder, progress_callback)
+        
+        # Update status to show completion
+        conversion_status[status_key] = {
+            'progress': 100,
+            'message': 'Conversion complete!',
+            'complete': True,
+            'filename': filename,
+            'download_url': f"/youtube/mp3/download/{video_id}"
+        }
+        logger.debug(f"YouTube to MP3 conversion completed: {filename}")
+        
+    except Exception as e:
+        # Update status to show error
+        conversion_status[status_key] = {
+            'progress': 0,
+            'message': f"Error: {str(e)}",
+            'complete': True,
+            'error': True
+        }
+        logger.exception(f"Error in YouTube to MP3 conversion: {e}")
 
 @app.route('/youtube/mp4', methods=['GET','POST'])
 def youtube_mp4():
