@@ -39,6 +39,7 @@
             var currentProgress = {{ progress }};
             var progressBar = document.getElementById('progress-bar');
             var progressPercentage = document.getElementById('progress-percentage');
+            var statusContainer = document.querySelector('.status-container');
             
             // Function to increment progress for visual effect only
             function incrementProgress() {
@@ -58,10 +59,37 @@
             // Start incrementing for visual effect
             setTimeout(incrementProgress, 500);
             
-            // Auto-refresh after a certain period to check completion
+            // Show a check button after a reasonable time (60 seconds)
             setTimeout(function() {
-              window.location.href = "{{ url_for('youtube_mp3', vid=video_id) }}";
-            }, 30000); // Check every 30 seconds
+              // Create a check status button that appears after some time
+              var checkButton = document.createElement('a');
+              checkButton.href = "{{ url_for('youtube_mp3', vid=video_id) }}";
+              checkButton.style.display = 'inline-block';
+              checkButton.style.padding = '8px 15px';
+              checkButton.style.backgroundColor = '#555';
+              checkButton.style.color = 'white';
+              checkButton.style.textDecoration = 'none';
+              checkButton.style.borderRadius = '4px';
+              checkButton.style.margin = '15px auto';
+              checkButton.innerHTML = 'Check If Download Ready';
+              
+              // Add a note explaining what this does
+              var note = document.createElement('p');
+              note.style.fontSize = '0.9em';
+              note.style.color = '#BBB';
+              note.style.marginTop = '5px';
+              note.textContent = 'Download taking a while? Click the button above to check if it\'s ready.';
+              
+              // Create a container for these elements
+              var buttonContainer = document.createElement('div');
+              buttonContainer.style.marginTop = '20px';
+              buttonContainer.style.textAlign = 'center';
+              
+              // Add elements to the page
+              buttonContainer.appendChild(checkButton);
+              buttonContainer.appendChild(note);
+              statusContainer.appendChild(buttonContainer);
+            }, 60000);  // Show after 60 seconds
           </script>
         </div>
       {% else %}
