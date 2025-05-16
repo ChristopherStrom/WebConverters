@@ -34,64 +34,55 @@ def sanitize_filename(filename):
     # Return sanitized name with original extension
     return f"{safe_name}{ext}"
 
-@app.route('/youtube/mp3', methods=['GET','POST'])
-def youtube_mp3():
-    error = None
-    success = None
-    download_id = None
-    download_name = None
+import threading
+
+# Track conversion status using a dictionary
+conversion_status = {}
+
+def background_youtube_conversion(url, video_id):
+    """Process YouTube conversion in a background thread"""
+    status_key = f"yt_{video_id}"
+    conversion_status[status_key] = {
+        'status': 'processing',
+        'message': 'Download in progress...',
+        'progress': 0,
+        'filename': None,
+        'url': url
+    }
     
-    if request.method == 'POST':
-        url = request.form.get('url')
-        try:
-            logger.debug(f"Starting YouTube to MP3 conversion for URL: {url}")
-            
-            # Extract video ID from URL for identification
-            video_id = None
-            if "v=" in url:
-                video_id = url.split("v=")[1].split("&")[0]
-            elif "youtu.be/" in url:
-                video_id = url.split("youtu.be/")[1].split("?")[0]
-            else:
-                video_id = f"video_{int(time.time())}"
-            
-            # Convert the YouTube video to MP3
-            path, name = convert_youtube_to_mp3(url, app.static_folder)
-            logger.debug(f"Conversion completed - Path: {path}, Name: {name}")
-            
-            # Additional safety check - if path doesn't exist, raise error
-            if not os.path.exists(path):
-                raise FileNotFoundError(f"The converted file does not exist at {path}")
-                
-            # Create an appropriate download name
+    try:
+        # Convert the YouTube video to MP3
+        path, name = convert_youtube_to_mp3(url, app.static_folder)
+        logger.debug(f"Conversion completed - Path: {path}, Name: {name}")
+        
+        # Create a safe download name
+        safe_name = secure_filename(name) if name else f"youtube_audio_{video_id}.mp3"
+        if not safe_name or safe_name == '.mp3':
             safe_name = f"youtube_audio_{video_id}.mp3"
-            if name:
-                safe_name = secure_filename(name)
-                if not safe_name or safe_name == '.mp3':
-                    safe_name = f"youtube_audio_{video_id}.mp3"
-            
-            # Just use the video ID for the stored file
-            # We don't need to rename the file as the converter already used a safe name
-            download_id = video_id
-            download_name = safe_name
-            
-            # Log more information for debugging
-            file_size = os.path.getsize(path)
-            logger.debug(f"File info - Path: {path}, Size: {file_size} bytes, ID: {download_id}")
-            
-            # Set success message for the template
-            success = f"Successfully converted '{name}'! Ready for download."
-            
-        except Exception as e:
-            logger.exception("Error in YouTube to MP3 conversion")
-            error = str(e)
-    
-    return render_template('youtube_mp3.html', 
-                           error=error, 
-                           success=success,
-                           download_id=download_id,
-                           download_name=download_name,
-                           url=request.form.get('url', ''))
+        
+        # Verify file exists in downloads directory with expected naming pattern
+        expected_path = os.path.join(app.static_folder, 'downloads', f"youtube_{video_id}.mp3")
+        if not os.path.exists(expected_path) and os.path.exists(path):
+            logger.info(f"Copying file to expected location: {expected_path}")
+            shutil.copy2(path, expected_path)
+        
+        # Update status to complete
+        conversion_status[status_key] = {
+            'status': 'complete',
+            'message': 'Conversion complete! Your file is ready for download.',
+            'progress': 100,
+            'filename': safe_name,
+            'url': url
+        }
+    except Exception as e:
+        logger.exception(f"Error in background YouTube conversion: {e}")
+        # Update status to error
+        conversion_status[status_key] = {
+            'status': 'error',
+            'message': f"Error: {str(e)}",
+            'progress': 0,
+            'url': url
+        }
 
 @app.route('/youtube/mp3/download/<download_id>')
 def download_youtube_mp3(download_id):
@@ -113,26 +104,43 @@ def download_youtube_mp3(download_id):
         file_size = os.path.getsize(file_path)
         logger.debug(f"Serving file: {file_path}, Size: {file_size} bytes")
         
-        # Create a direct URL to the static file
-        static_url = f"/static/downloads/{filename}"
+        # Get status key
+        status_key = f"yt_{download_id}"
+        display_filename = f"youtube_audio_{download_id}.mp3"
+        
+        # Try to get a better filename from conversion status
+        if status_key in conversion_status and conversion_status[status_key].get('filename'):
+            display_filename = conversion_status[status_key]['filename']
         
         # Schedule cleanup after a delay
         def delayed_cleanup():
-            time.sleep(300)  # 5 minutes
+            time.sleep(1800)  # 30 minutes
             try:
                 if os.path.exists(file_path):
                     os.remove(file_path)
                     logger.debug(f"Removed MP3 file after delay: {file_path}")
+                # Also remove from status tracking
+                if status_key in conversion_status:
+                    del conversion_status[status_key]
             except Exception as e:
                 logger.error(f"Error removing file: {e}")
         
-        import threading
         cleanup_thread = threading.Thread(target=delayed_cleanup)
         cleanup_thread.daemon = True
         cleanup_thread.start()
         
-        # Just redirect to the static file
-        return redirect(static_url)
+        # Two options:
+        # 1. Send the file directly (more reliable for some browsers)
+        return send_file(
+            file_path,
+            mimetype='audio/mpeg',
+            as_attachment=True,
+            download_name=display_filename
+        )
+        
+        # 2. Redirect to static file (fallback - commented out)
+        # static_url = f"/static/downloads/{filename}"
+        # return redirect(static_url)
     
     except Exception as e:
         logger.exception(f"Error in download_youtube_mp3: {e}")
