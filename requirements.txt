@@ -4,3 +4,4 @@ yt_dlp
 gunicorn
 pydub
 Pillow
+pyaudioop

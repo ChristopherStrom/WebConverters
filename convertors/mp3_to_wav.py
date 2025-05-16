@@ -2,7 +2,7 @@ import os
 import re
 import tempfile
 import shutil
-from pydub import AudioSegment
+import subprocess
 from typing import Tuple
 
 def convert_to_wav(file_path: str, static_folder: str) -> Tuple[str, str]:
@@ -18,16 +18,23 @@ def convert_to_wav(file_path: str, static_folder: str) -> Tuple[str, str]:
         filename = os.path.basename(file_path)
         base_name, ext = os.path.splitext(filename)
         
-        # 2) Load the audio file using pydub
-        if ext.lower() in ['.mp3', '.mp4', '.m4a']:
-            audio = AudioSegment.from_file(file_path)
-        else:
+        # 2) Check file format
+        if ext.lower() not in ['.mp3', '.mp4', '.m4a']:
             raise ValueError("Unsupported file format. Please upload an MP3 or MP4 audio file.")
             
-        # 3) Convert to WAV
+        # 3) Convert to WAV using ffmpeg
         wav_filename = f"{base_name}.wav"
         wav_path = os.path.join(tmpdir, wav_filename)
-        audio.export(wav_path, format="wav")
+        
+        try:
+            subprocess.run([
+                'ffmpeg', '-i', file_path,
+                '-acodec', 'pcm_s16le',
+                '-ar', '44100',
+                wav_path
+            ], check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Failed to convert file: {e.stderr}")
         
         # 4) Move to static/downloads
         downloads_dir = os.path.join(static_folder, 'downloads')
