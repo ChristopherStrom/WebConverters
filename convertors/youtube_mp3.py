@@ -145,6 +145,10 @@ def convert_youtube_to_mp3(url: str, static_folder: str, progress_callback=None)
         # 5) Create a sensible download name using the video title
         download_name = f"{clean_title or safe_filename}.mp3"
         
+        # Final progress update to indicate completion
+        if progress_callback:
+            progress_callback(100, "Conversion complete! Your file is ready for download.", True)
+        
         print(f"Returning file path: {dst}, download name: {download_name}")
         return dst, download_name
         

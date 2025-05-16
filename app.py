@@ -86,6 +86,77 @@ def background_youtube_conversion(url, video_id):
             'url': url
         }
 
+@app.route('/api/youtube/status/<video_id>')
+def youtube_mp3_status_api(video_id):
+    """API endpoint to get the current status of a YouTube MP3 conversion"""
+    from flask import jsonify
+    
+    status_key = f"yt_{video_id}"
+    response = {
+        "status": "unknown",
+        "progress": 0,
+        "message": "No information available",
+        "complete": False,
+        "file_ready": False,
+        "download_url": None,
+        "error": False
+    }
+    
+    # Check if file exists
+    expected_path = os.path.join(app.static_folder, 'downloads', f"youtube_{video_id}.mp3")
+    
+    if os.path.exists(expected_path):
+        # File already exists, ready for download
+        file_size = os.path.getsize(expected_path)
+        response.update({
+            "status": "complete",
+            "progress": 100,
+            "message": "Your file is ready for download!",
+            "complete": True,
+            "file_ready": True,
+            "download_url": f"/static/downloads/youtube_{video_id}.mp3",
+            "file_size": file_size
+        })
+        logger.debug(f"API status check: MP3 file exists for {video_id}, size: {file_size} bytes")
+    elif status_key in conversion_status:
+        # Get status from conversion status dictionary
+        current_status = conversion_status[status_key]
+        
+        # Check if there was an error
+        if current_status.get('error', False):
+            response.update({
+                "status": "error",
+                "message": current_status.get('message', 'An error occurred during conversion'),
+                "error": True,
+                "complete": True
+            })
+            logger.debug(f"API status check: Error state for MP3 {video_id}: {response['message']}")
+        else:
+            response.update({
+                "status": "processing" if not current_status.get('complete', False) else "complete",
+                "progress": current_status.get('progress', 0),
+                "message": current_status.get('message', 'Processing...'),
+                "complete": current_status.get('complete', False),
+                "file_ready": current_status.get('complete', False) and os.path.exists(expected_path)
+            })
+            
+            # If complete, add download URL but verify file exists
+            if current_status.get('complete', False):
+                if os.path.exists(expected_path):
+                    response["download_url"] = f"/static/downloads/youtube_{video_id}.mp3"
+                    response["file_ready"] = True
+                else:
+                    # This is a problem - marked complete but file doesn't exist
+                    response["message"] = "Error: File not found. Please try again."
+                    response["error"] = True
+                    logger.warning(f"API status check: MP3 file missing for completed conversion {video_id}")
+            
+            logger.debug(f"API status check: Status for MP3 {video_id}: {response['status']}, progress: {response['progress']}%")
+    else:
+        logger.warning(f"API status check: No status found for MP3 {video_id}")
+    
+    return jsonify(response)
+
 @app.route('/youtube/mp3', methods=['GET', 'POST'])
 def youtube_mp3():
     """YouTube to MP3 converter page and API endpoint"""
