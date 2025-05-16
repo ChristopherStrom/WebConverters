@@ -181,21 +181,16 @@ def youtube_mp3():
                 error = "Could not extract video ID from URL. Please use a standard YouTube URL."
                 
             if video_id and not error:
-                # Start a new conversion task
-                status_key = f"yt_{video_id}"
-                conversion_status[status_key] = {
-                    'progress': 0,
-                    'message': 'Starting download...',
-                    'complete': False
-                }
+                logger.info(f"Starting YouTube to MP3 conversion for video ID: {video_id}")
                 
-                # Launch conversion in background thread
+                # Start a new conversion task in a background thread
                 thread = threading.Thread(
-                    target=process_youtube_mp3,
-                    args=(url, video_id, app.static_folder)
+                    target=background_youtube_conversion,
+                    args=(url, video_id)
                 )
                 thread.daemon = True
                 thread.start()
+                logger.debug(f"Background conversion thread started for video ID: {video_id}")
                 
                 # Redirect to status page
                 return redirect(url_for('youtube_mp3', vid=video_id))
