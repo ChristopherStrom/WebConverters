@@ -1,4 +1,5 @@
-from flask import Flask, render_template, request, redirect, url_for, send_file, send_from_directory, after_this_request
+from flask import Flask, render_template, request, redirect, url_for, send_file, send_from_directory, \
+    after_this_request, flash
 from convertors.tiktok_mp3 import convert_tiktok_to_mp3
 from convertors.youtube_mp3 import convert_youtube_to_mp3
 from convertors.youtube_mp4 import convert_youtube_to_mp4
@@ -416,6 +417,10 @@ def tiktok_mp3():
         except Exception as e:
             return render_template('tiktok_mp3.html', error=str(e), url=url)
     return render_template('tiktok_mp3.html')
+
+@app.route('/external-seo-form', methods=['GET'])
+def external_seo_form():
+    return render_template('external_seo_form.html')
 
 @app.route('/convert/to_wav', methods=['GET', 'POST'])
 def convert_to_wav_route():
